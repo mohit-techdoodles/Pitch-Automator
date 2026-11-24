@@ -1,0 +1,20 @@
+{
+  "1": {
+    "step": 1,
+    "delay_days": 0,
+    "subject": "Quick idea for {company}",
+    "body": "Hi {company} team,\n\nI was looking at {website} and noticed an opportunity where our product could streamline your workflow.\n\nWould you be open to a brief 2-minute overview?\n\nBest,\n{sender_name}\n\nIf this is not relevant, reply 'stop' and I will not follow up."
+  },
+  "2": {
+    "step": 2,
+    "delay_days": 3,
+    "subject": "Re: Quick idea for {company}",
+    "body": "Hi {company} team,\n\nFollowing up on my note below in case it got buried. Happy to share a short summary if this is on your radar.\n\nBest,\n{sender_name}"
+  },
+  "3": {
+    "step": 3,
+    "delay_days": 5,
+    "subject": "Re: Quick idea for {company}",
+    "body": "Hi {company} team,\n\nI will close the loop here so I do not crowd your inbox. Feel free to reach back out if this ever becomes a priority down the road.\n\nBest,\n{sender_name}"
+  }
+}
