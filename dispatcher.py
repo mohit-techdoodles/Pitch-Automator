@@ -1,4 +1,5 @@
 import os
+import re
 import smtplib
 import random
 import time
@@ -52,6 +53,56 @@ def format_template(text: str, variables: Dict[str, str]) -> str:
     return text.format_map(SafeDict(variables))
 
 
+def sanitize_company_name(name: Optional[str]) -> str:
+    """
+    Intelligently sanitize company names for human-like cold outreach:
+    1. Removes legal entity suffixes (e.g. Pvt Ltd, Inc., LLC, GmbH, Corp).
+    2. Removes domain extensions (e.g. Acme.com -> Acme).
+    3. Cleans taglines/separators (e.g. Acme - Cloud Services -> Acme).
+    4. Strips trailing commas, dots, and normalizes ALL-CAPS names.
+    """
+    if not name or not str(name).strip():
+        return "your company"
+
+    clean = str(name).strip()
+
+    # 1. Remove URLs/domain extensions if the company was scraped as a domain/URL
+    clean = re.sub(r"^https?://(?:www\.)?", "", clean, flags=re.IGNORECASE)
+    clean = re.sub(r"\.(?:com|io|co\.uk|org|net|ai|in|de|ca|dev|tech|app|biz|info)/?$", "", clean, flags=re.IGNORECASE)
+
+    # 2. Strip tagline separators like " | ", " - ", " – ", " — ", " : "
+    for sep in [" | ", " - ", " – ", " — ", " : ", " // "]:
+        if sep in clean:
+            clean = clean.split(sep)[0].strip()
+
+    # 3. Strip legal identifiers and business entities
+    legal_patterns = [
+        r",?\s*\b(?:pvt\.?\s*ltd\.?|private\s+limited)\b",
+        r",?\s*\b(?:pty\.?\s*ltd\.?|proprietary\s+limited)\b",
+        r",?\s*\b(?:l\.?l\.?c\.?|limited\s+liability\s+company)\b",
+        r",?\s*\b(?:l\.?l\.?p\.?|limited\s+liability\s+partnership)\b",
+        r",?\s*\b(?:inc\.?|incorporated)\b",
+        r",?\s*\b(?:corp\.?|corporation)\b",
+        r",?\s*\b(?:ltd\.?|limited)\b",
+        r",?\s*\b(?:co\.?|company)\b",
+        r",?\s*\b(?:gmbh|s\.a\.?|s\.r\.l\.?|b\.v\.?|plc)\b",
+    ]
+    for pat in legal_patterns:
+        clean = re.sub(pat, "", clean, flags=re.IGNORECASE).strip()
+
+    # 4. Remove parenthetical qualifiers, e.g. "Acme (US)", "TechFlow (HQ)"
+    clean = re.sub(r"\s*\([^)]*\)", "", clean).strip()
+
+    # 5. Remove trailing punctuation: commas, dashes, dots
+    clean = re.sub(r"[\s,\.\-_/]+$", "", clean).strip()
+
+    # 6. Normalize casing if ALL-CAPS (e.g. "TECHFLOW INNOVATIONS" -> "Techflow Innovations")
+    if clean.isupper() and len(clean) > 3:
+        clean = clean.title()
+
+    return clean if clean else "your company"
+
+
 def build_message(
     lead: Dict[str, Any],
     step_num: int,
@@ -66,9 +117,13 @@ def build_message(
     domain = sender_email.split("@")[-1] if "@" in sender_email else "localhost"
     generated_msg_id = make_msgid(domain=domain)
 
+    # Sanitize company name for clean human subject lines and greetings
+    clean_company = sanitize_company_name(lead.get("company"))
+
     # Variables for placeholder formatting
     vars_dict = {
-        "company": lead.get("company") or "your company",
+        "company": clean_company,
+        "raw_company": lead.get("company") or "",
         "website": lead.get("website") or "",
         "country": lead.get("country") or "",
         "email": lead.get("email") or "",

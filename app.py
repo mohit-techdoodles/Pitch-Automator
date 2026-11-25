@@ -348,6 +348,10 @@ with tab_sequences:
                     value=step_data.get("subject", ""),
                     key=f"sub_{step_key}",
                 )
+                if "{company}" in subject:
+                    st.caption("🟢 High Deliverability: Subject contains `{company}` personalization.")
+                else:
+                    st.warning("⚠️ Deliverability Warning: Subject is missing `{company}`. Personalizing with `{company}` prevents messages from being flagged as spam.")
 
             body = st.text_area(
                 f"Plain-Text Body (Step {step_key})",
@@ -363,10 +367,10 @@ with tab_sequences:
                 "body": body,
             }
 
-            # Live Preview with dummy data
+            # Live Preview with dummy data demonstrating the Intelligent Sanitizer
             st.markdown("##### 👁️ Live Preview for Sample Lead:")
             sample_lead = {
-                "company": "Acme Corp",
+                "company": "Acme Innovations Pvt. Ltd.",
                 "website": "https://acme.com",
                 "country": "US",
                 "email": "contact@acme.com",
@@ -380,6 +384,7 @@ with tab_sequences:
             )
             preview_box = f"**Subject:** {preview_msg['Subject']}\n\n```\n{preview_msg.get_content()}\n```"
             st.markdown(preview_box)
+            st.caption("💡 *Intelligent Sanitizer automatically cleans raw legal suffixes (e.g. 'Acme Innovations Pvt. Ltd.' ➔ 'Acme Innovations') so emails appear authentic and 1-on-1.*")
 
     st.write("")
     if st.button("💾 Save All Sequence Templates", type="primary"):
