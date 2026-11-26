@@ -284,3 +284,14 @@ def get_recent_send_logs(db_path: str, limit: int = 50) -> List[Dict[str, Any]]:
             (limit,),
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+def clear_database(db_path: str, clear_logs: bool = True) -> None:
+    """Clear all leads and optionally send_log from database."""
+    init_db(db_path)
+    with get_db_connection(db_path) as conn:
+        conn.execute("DELETE FROM leads")
+        if clear_logs:
+            conn.execute("DELETE FROM send_log")
+        conn.commit()
+

@@ -16,6 +16,7 @@ from db import (
     import_leads_from_rows,
     update_lead_status,
     get_recent_send_logs,
+    clear_database,
 )
 from inbox_sync import test_imap_connection, sync_inbox_events
 from dispatcher import (
@@ -579,3 +580,16 @@ with tab_settings:
     st.markdown("##### 📁 Local Paths")
     st.text(f"Database: {cfg.get('DB_PATH')}")
     st.text(f"Base Directory: {BASE_DIR}")
+
+    st.divider()
+    with st.expander("🗑️ Danger Zone: Reset / Clear Database"):
+        st.warning("⚠️ Warning: This will permanently delete all leads and sequence progression from the database.")
+        col_wipe1, col_wipe2 = st.columns([2, 1])
+        with col_wipe1:
+            wipe_logs = st.checkbox("Also reset today's send history & audit logs", value=True)
+        with col_wipe2:
+            st.write("")
+            if st.button("🚨 Wipe Database Now", type="primary"):
+                clear_database(db_path, clear_logs=wipe_logs)
+                st.success("✅ Database has been completely cleared!")
+                st.rerun()
