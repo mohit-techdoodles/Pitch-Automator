@@ -414,14 +414,33 @@ with tab_runner:
     st.divider()
     st.subheader("2. Outbound Pitch Dispatcher (SMTP)")
 
-    due_list = get_due_leads(db_path, max_step=len(sequences))
+    total_stats = get_lead_stats(db_path)
+    total_leads_count = total_stats["TOTAL"]
+
+    col_toggle1, col_toggle2 = st.columns([1, 1])
+    with col_toggle1:
+        ignore_delay_toggle = st.checkbox(
+            "⚡ Send Immediately (Ignore scheduled delay days)",
+            value=False,
+            help="Check this if you want to send the next follow-up right away without waiting for the scheduled 3-5 day delay.",
+        )
+
+    due_list = get_due_leads(db_path, max_step=len(sequences), ignore_delay=ignore_delay_toggle)
     quota_avail = remaining_daily_quota(db_path, int(cfg.get("DAILY_SEND_LIMIT", 40)))
 
     col_q1, col_q2 = st.columns(2)
     with col_q1:
-        st.info(f"📋 **{len(due_list)}** lead(s) currently due for their next sequence.")
+        st.info(f"📋 **{len(due_list)}** lead(s) currently ready to receive an email.")
     with col_q2:
         st.info(f"⏳ **{quota_avail}** email(s) remaining in today's daily quota.")
+
+    # Clear contextual banners explaining exact status
+    if total_leads_count == 0:
+        st.warning("⚠️ **No Leads in Database:** The button below is disabled because no leads have been imported yet. Please go to the **📥 Lead Ingestion** tab and upload your CSV first.")
+    elif quota_avail <= 0:
+        st.error("⛔ **Daily Quota Reached:** Today's send limit has been reached. You can increase the Daily Send Limit in the **⚙️ Settings** tab.")
+    elif len(due_list) == 0:
+        st.info("ℹ️ **No Leads Due Right Now:** All leads in your database have already received their current step and are waiting for their scheduled follow-up delay (e.g., Step 2 in 3 days). Check **'Send Immediately'** above if you want to bypass the wait time.")
 
     col_run_opt1, col_run_opt2, col_run_opt3 = st.columns(3)
     with col_run_opt1:
@@ -431,7 +450,9 @@ with tab_runner:
     with col_run_opt3:
         bypass_delay = st.checkbox("⚡ Fast Mode (Skip 3-7m delay)", value=True, help="Skips the sleep window between emails (useful for testing or small initial batches).")
 
-    if st.button("🚀 Start Outreach Dispatch", type="primary", disabled=(quota_avail <= 0 or len(due_list) == 0)):
+    is_dispatch_disabled = (quota_avail <= 0 or len(due_list) == 0)
+
+    if st.button("🚀 Start Outreach Dispatch", type="primary", disabled=is_dispatch_disabled):
         log_box = st.empty()
         logs_accum = []
 
@@ -447,6 +468,7 @@ with tab_runner:
                 max_to_send=int(max_batch),
                 dry_run=dry_run_mode,
                 sleep_between=not bypass_delay,
+                ignore_delay=ignore_delay_toggle,
                 log_callback=log_stream,
             )
             st.success(f"Batch completed! Processed: {result.get('sent', 0)} email(s).")

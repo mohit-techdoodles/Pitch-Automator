@@ -9,7 +9,7 @@ from email.utils import formataddr, make_msgid, formatdate
 from typing import Dict, Any, List, Tuple, Optional, Callable
 import sqlite3
 
-from db import get_db_connection, utc_now, utc_now_iso, get_daily_sent_count
+from db import get_db_connection, utc_now, utc_now_iso, get_daily_sent_count, get_due_leads
 
 
 def test_smtp_connection(config: Dict[str, Any]) -> Tuple[bool, str]:
@@ -215,6 +215,7 @@ def run_pitch_dispatch(
     max_to_send: Optional[int] = None,
     dry_run: bool = False,
     sleep_between: bool = True,
+    ignore_delay: bool = False,
     log_callback: Optional[Callable[[str], None]] = None,
     progress_callback: Optional[Callable[[int, int], None]] = None,
 ) -> Dict[str, Any]:
@@ -252,31 +253,21 @@ def run_pitch_dispatch(
         limit_to_fetch = min(quota, max_to_send)
 
     total_sequence_steps = len(sequences)
-    conn = get_db_connection(db_path)
 
-    # Fetch due leads
-    now_iso = utc_now_iso()
-    cursor = conn.execute(
-        """
-        SELECT * FROM leads
-        WHERE (
-            (status = 'PENDING' AND (next_send_at IS NULL OR next_send_at <= ?))
-            OR
-            (status = 'IN_SEQUENCE' AND next_send_at <= ? AND current_step < ?)
-        )
-        ORDER BY current_step DESC, next_send_at ASC
-        LIMIT ?
-        """,
-        (now_iso, now_iso, total_sequence_steps, limit_to_fetch),
+    # Fetch due leads using db query
+    due_leads = get_due_leads(
+        db_path=db_path,
+        max_step=total_sequence_steps,
+        limit=limit_to_fetch,
+        ignore_delay=ignore_delay,
     )
-    due_leads = [dict(r) for r in cursor.fetchall()]
 
     if not due_leads:
         log("✅ No leads are currently due for sending.")
-        conn.close()
         return {"sent": 0, "quota_left": quota, "reason": "No due leads"}
 
-    log(f"🎯 Found {len(due_leads)} due lead(s) to process.")
+    log(f"🎯 Found {len(due_leads)} lead(s) ready to process.")
+    conn = get_db_connection(db_path)
 
     # Initialize SMTP server connection if not dry run
     server = None

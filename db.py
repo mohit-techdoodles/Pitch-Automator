@@ -216,24 +216,41 @@ def get_leads(
         return [dict(r) for r in rows]
 
 
-def get_due_leads(db_path: str, max_step: int = 3, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+def get_due_leads(
+    db_path: str, max_step: int = 3, limit: Optional[int] = None, ignore_delay: bool = False
+) -> List[Dict[str, Any]]:
     """
     Get leads that are due to receive their next pitch sequence:
-    1. PENDING leads (next_send_at <= now or NULL) -> ready for Step 1
-    2. IN_SEQUENCE leads (next_send_at <= now and current_step < max_step) -> ready for Step 2 or 3
+    1. PENDING leads (ready for Step 1)
+    2. IN_SEQUENCE leads (ready for Step 2 or 3)
+    If ignore_delay is True, ignores next_send_at timestamp (useful for testing or immediate sends).
     """
     init_db(db_path)
     now_iso = utc_now_iso()
-    query = """
-        SELECT * FROM leads
-        WHERE (
-            (status = 'PENDING' AND (next_send_at IS NULL OR next_send_at <= ?))
-            OR
-            (status = 'IN_SEQUENCE' AND next_send_at <= ? AND current_step < ?)
-        )
-        ORDER BY current_step DESC, next_send_at ASC
-    """
-    params = [now_iso, now_iso, max_step]
+
+    if ignore_delay:
+        query = """
+            SELECT * FROM leads
+            WHERE (
+                status = 'PENDING'
+                OR
+                (status = 'IN_SEQUENCE' AND current_step < ?)
+            )
+            ORDER BY current_step ASC, updated_at ASC
+        """
+        params = [max_step]
+    else:
+        query = """
+            SELECT * FROM leads
+            WHERE (
+                (status = 'PENDING' AND (next_send_at IS NULL OR next_send_at <= ?))
+                OR
+                (status = 'IN_SEQUENCE' AND next_send_at <= ? AND current_step < ?)
+            )
+            ORDER BY current_step DESC, next_send_at ASC
+        """
+        params = [now_iso, now_iso, max_step]
+
     if limit is not None and limit > 0:
         query += " LIMIT ?"
         params.append(limit)
