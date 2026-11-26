@@ -56,9 +56,37 @@ def init_db(db_path: str) -> None:
         conn.commit()
 
 
-def import_leads_from_rows(db_path: str, rows: List[Dict[str, str]]) -> Tuple[int, int]:
+def _extract_lead_field(row: Dict[str, Any], candidate_keys: List[str]) -> str:
+    """
+    Intelligently find field value using case-insensitive and substring matching.
+    Filters out placeholder values like 'Not listed', 'Not found', '—', etc.
+    """
+    lower_map = {str(k).strip().lower(): str(v).strip() for k, v in row.items() if v is not None}
+    invalid_placeholders = {"not listed", "not found", "not found on maps", "none", "null", "n/a", "—", "-"}
+
+    # 1. Exact match pass
+    for cand in candidate_keys:
+        cand_l = cand.lower()
+        if cand_l in lower_map and lower_map[cand_l]:
+            val = lower_map[cand_l]
+            if val.lower() not in invalid_placeholders:
+                return val
+
+    # 2. Substring match pass
+    for cand in candidate_keys:
+        cand_l = cand.lower()
+        for k, val in lower_map.items():
+            if cand_l in k and val:
+                if val.lower() not in invalid_placeholders:
+                    return val
+
+    return ""
+
+
+def import_leads_from_rows(db_path: str, rows: List[Dict[str, Any]]) -> Tuple[int, int]:
     """
     Insert leads from row dictionaries using INSERT OR IGNORE so existing states are preserved.
+    Supports standard CSVs as well as Lead Scrapper hotel exports (Hotel Name, Direct Email, etc.).
     Returns: (inserted_count, ignored_count)
     """
     init_db(db_path)
@@ -66,13 +94,19 @@ def import_leads_from_rows(db_path: str, rows: List[Dict[str, str]]) -> Tuple[in
     inserted = 0
     ignored = 0
 
+    email_aliases = ["direct email", "email", "mail", "e-mail", "contact email", "email address"]
+    company_aliases = ["hotel name", "company", "business name", "place name", "organization", "hotel", "name"]
+    website_aliases = ["official website", "website", "url", "web", "site", "domain"]
+    country_aliases = ["country", "city", "street address", "location", "state", "address"]
+
     with get_db_connection(db_path) as conn:
         for r in rows:
-            email = r.get("email", "").strip().lower()
-            company = r.get("company", "").strip()
-            country = r.get("country", "").strip()
-            website = r.get("website", "").strip()
+            email = _extract_lead_field(r, email_aliases).lower()
+            company = _extract_lead_field(r, company_aliases)
+            country = _extract_lead_field(r, country_aliases)
+            website = _extract_lead_field(r, website_aliases)
 
+            # Skip rows where no valid email was found or extracted
             if not email or "@" not in email:
                 continue
 

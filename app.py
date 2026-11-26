@@ -246,25 +246,21 @@ with tab_leads:
 
             # Column mapping check
             cols = [c.lower().strip() for c in raw_df.columns]
-            has_email = any("email" in c for c in cols)
-            has_company = any("company" in c or "name" in c for c in cols)
+            has_email = any("email" in c or "mail" in c for c in cols)
+            has_company = any("company" in c or "name" in c or "hotel" in c for c in cols)
 
             if not has_email:
-                st.error("Uploaded CSV must have an 'email' column.")
+                st.error("Uploaded CSV must have an email column (e.g. 'Direct Email', 'email', 'contact_email').")
             else:
+                # Detect if this is from Lead Scrapper
+                is_hotel_format = any("hotel" in c for c in cols)
+                if is_hotel_format:
+                    st.info("🏨 **Lead Scrapper Hotel Format Detected:** Automatically mapping `Hotel Name` ➔ Company, `Direct Email` ➔ Email, and `Official Website` ➔ Website.")
+
                 if st.button("📥 Import Leads into Outreach Database", type="primary"):
-                    # Normalize columns
-                    records = []
-                    for _, row in raw_df.iterrows():
-                        r_dict = {str(k).strip().lower(): str(v).strip() for k, v in row.to_dict().items() if pd.notna(v)}
-                        records.append({
-                            "email": r_dict.get("email", ""),
-                            "company": r_dict.get("company", r_dict.get("business_name", r_dict.get("name", ""))),
-                            "website": r_dict.get("website", r_dict.get("url", "")),
-                            "country": r_dict.get("country", ""),
-                        })
+                    records = raw_df.to_dict(orient="records")
                     inserted, ignored = import_leads_from_rows(db_path, records)
-                    st.success(f"🎉 Successfully imported {inserted} new lead(s)! ({ignored} existing duplicates skipped)")
+                    st.success(f"🎉 Successfully imported {inserted} new lead(s) with valid emails! ({ignored} skipped due to duplicates or unlisted emails)")
                     st.rerun()
         except Exception as e:
             st.error(f"Error reading CSV: {e}")
