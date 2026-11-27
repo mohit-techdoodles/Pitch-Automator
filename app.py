@@ -87,7 +87,7 @@ st.markdown(
 cfg = get_config()
 db_path = cfg["DB_PATH"]
 init_db(db_path)
-sequences = get_sequences()
+sequences = get_sequences(db_path=db_path)
 
 # Sidebar: Identity & System Summary
 with st.sidebar:
@@ -323,11 +323,67 @@ with tab_sequences:
         "Craft your multi-step plain-text pitch. Available variables: `{company}`, `{website}`, `{country}`, `{sender_name}`, `{sender_email}`."
     )
 
+    # Initialize session_state from saved sequences
+    for s_k, s_d in sequences.items():
+        if f"sub_{s_k}" not in st.session_state:
+            st.session_state[f"sub_{s_k}"] = s_d.get("subject", "")
+        if f"body_{s_k}" not in st.session_state:
+            st.session_state[f"body_{s_k}"] = s_d.get("body", "")
+        if f"delay_{s_k}" not in st.session_state:
+            st.session_state[f"delay_{s_k}"] = int(s_d.get("delay_days", 0))
+
+    def persist_current_sequences():
+        to_save = {}
+        for s_k in sorted(sequences.keys(), key=lambda x: int(x)):
+            to_save[s_k] = {
+                "step": int(s_k),
+                "delay_days": int(st.session_state.get(f"delay_{s_k}", 0)),
+                "subject": str(st.session_state.get(f"sub_{s_k}", "")),
+                "body": str(st.session_state.get(f"body_{s_k}", "")),
+            }
+        save_sequences(to_save, db_path=db_path)
+        return to_save
+
+    # Action bar: Prominent Save & Backup/Restore
+    col_act1, col_act2, col_act3 = st.columns([2, 1, 1])
+    with col_act1:
+        if st.button("💾 Save All Changes (Database & File)", type="primary", key="btn_save_top"):
+            persist_current_sequences()
+            st.success("✅ Sequence templates permanently saved to Database and configuration!")
+            st.rerun()
+    with col_act2:
+        seq_json_str = json.dumps(sequences, indent=2)
+        st.download_button(
+            "📤 Export JSON Backup",
+            data=seq_json_str,
+            file_name="pitch_sequences_backup.json",
+            mime="application/json",
+            use_container_width=True,
+            help="Download a backup copy of your customized templates to your computer.",
+        )
+    with col_act3:
+        with st.popover("📥 Restore Backup"):
+            uploaded_seq = st.file_uploader("Upload JSON Backup", type=["json"], key="upload_seq_backup")
+            if uploaded_seq is not None:
+                try:
+                    loaded_seq = json.load(uploaded_seq)
+                    if isinstance(loaded_seq, dict):
+                        save_sequences(loaded_seq, db_path=db_path)
+                        for k, v in loaded_seq.items():
+                            st.session_state[f"sub_{k}"] = v.get("subject", "")
+                            st.session_state[f"body_{k}"] = v.get("body", "")
+                            st.session_state[f"delay_{k}"] = int(v.get("delay_days", 0))
+                        st.success("Templates restored!")
+                        st.rerun()
+                except Exception as err:
+                    st.error(f"Error loading file: {err}")
+
+    st.write("")
     step_tabs = st.tabs([f"Step {k}" for k in sorted(sequences.keys(), key=lambda x: int(x))])
 
-    updated_sequences = dict(sequences)
+    updated_sequences = {}
 
-    for idx, (step_key, step_data) in enumerate(sorted(sequences.items(), key=lambda x: int(x[0]))):
+    for idx, step_key in enumerate(sorted(sequences.keys(), key=lambda x: int(x))):
         with step_tabs[idx]:
             col_cfg1, col_cfg2 = st.columns([2, 5])
             with col_cfg1:
@@ -335,14 +391,12 @@ with tab_sequences:
                     f"Delay Days before Step {step_key}",
                     min_value=0,
                     max_value=30,
-                    value=int(step_data.get("delay_days", 0)),
                     key=f"delay_{step_key}",
                     help="Days to wait after the previous email was sent (0 for initial pitch)."
                 )
             with col_cfg2:
                 subject = st.text_input(
                     f"Subject Line (Step {step_key})",
-                    value=step_data.get("subject", ""),
                     key=f"sub_{step_key}",
                 )
                 if "{company}" in subject:
@@ -352,7 +406,6 @@ with tab_sequences:
 
             body = st.text_area(
                 f"Plain-Text Body (Step {step_key})",
-                value=step_data.get("body", ""),
                 height=180,
                 key=f"body_{step_key}",
             )
@@ -384,9 +437,9 @@ with tab_sequences:
             st.caption("💡 *Intelligent Sanitizer automatically cleans raw legal suffixes (e.g. 'Acme Innovations Pvt. Ltd.' ➔ 'Acme Innovations') so emails appear authentic and 1-on-1.*")
 
     st.write("")
-    if st.button("💾 Save All Sequence Templates", type="primary"):
-        save_sequences(updated_sequences)
-        st.success("Sequence templates saved successfully!")
+    if st.button("💾 Save All Sequence Templates", type="primary", key="btn_save_bottom"):
+        persist_current_sequences()
+        st.success("Sequence templates permanently saved!")
         st.rerun()
 
 # ==========================================

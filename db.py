@@ -53,6 +53,17 @@ def init_db(db_path: str) -> None:
             );
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sequence_templates (
+                step INTEGER PRIMARY KEY,
+                delay_days INTEGER DEFAULT 0,
+                subject TEXT NOT NULL,
+                body TEXT NOT NULL,
+                updated_at TEXT
+            );
+            """
+        )
         conn.commit()
 
 
@@ -294,4 +305,51 @@ def clear_database(db_path: str, clear_logs: bool = True) -> None:
         if clear_logs:
             conn.execute("DELETE FROM send_log")
         conn.commit()
+
+
+def get_db_sequences(db_path: str) -> Dict[str, Any]:
+    """Retrieve saved sequence templates from SQLite database."""
+    init_db(db_path)
+    with get_db_connection(db_path) as conn:
+        rows = conn.execute(
+            "SELECT step, delay_days, subject, body FROM sequence_templates ORDER BY step ASC"
+        ).fetchall()
+        if not rows:
+            return {}
+        result = {}
+        for r in rows:
+            s_key = str(r["step"])
+            result[s_key] = {
+                "step": int(r["step"]),
+                "delay_days": int(r["delay_days"]),
+                "subject": str(r["subject"]),
+                "body": str(r["body"]),
+            }
+        return result
+
+
+def save_db_sequences(db_path: str, sequences: Dict[str, Any]) -> None:
+    """Persist sequence templates into SQLite database."""
+    init_db(db_path)
+    now_iso = utc_now_iso()
+    with get_db_connection(db_path) as conn:
+        for s_key, s_data in sequences.items():
+            step_num = int(s_data.get("step", s_key))
+            delay = int(s_data.get("delay_days", 0))
+            subject = str(s_data.get("subject", ""))
+            body = str(s_data.get("body", ""))
+            conn.execute(
+                """
+                INSERT INTO sequence_templates (step, delay_days, subject, body, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(step) DO UPDATE SET
+                    delay_days = excluded.delay_days,
+                    subject = excluded.subject,
+                    body = excluded.body,
+                    updated_at = excluded.updated_at
+                """,
+                (step_num, delay, subject, body, now_iso),
+            )
+        conn.commit()
+
 

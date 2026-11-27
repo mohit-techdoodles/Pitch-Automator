@@ -90,20 +90,48 @@ def save_config(new_values: dict):
     load_dotenv(dotenv_path=ENV_PATH, override=True)
 
 
-def get_sequences():
-    """Load sequences from JSON or create with defaults."""
-    if not SEQUENCES_PATH.exists():
-        save_sequences(DEFAULT_SEQUENCES)
-        return DEFAULT_SEQUENCES
+def get_sequences(db_path: Optional[str] = None):
+    """Load sequences with priority: Database -> sequences.json -> DEFAULT_SEQUENCES."""
+    # 1. Try loading from SQLite database first
+    active_db = db_path or str(BASE_DIR / os.getenv("OUTREACH_DB", "outreach.db"))
+    if Path(active_db).exists():
+        try:
+            from db import get_db_sequences
+            db_seqs = get_db_sequences(active_db)
+            if db_seqs and len(db_seqs) > 0:
+                return db_seqs
+        except Exception:
+            pass
+
+    # 2. Try loading from sequences.json
+    if SEQUENCES_PATH.exists():
+        try:
+            with open(SEQUENCES_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if data:
+                    return data
+        except Exception:
+            pass
+
+    # 3. Fallback to default sequences and write to JSON
+    save_sequences(DEFAULT_SEQUENCES, db_path=active_db)
+    return DEFAULT_SEQUENCES
+
+
+def save_sequences(sequences: dict, db_path: Optional[str] = None):
+    """Save updated sequence templates to both sequences.json and SQLite database."""
+    # 1. Save to JSON
     try:
-        with open(SEQUENCES_PATH, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            return data
+        with open(SEQUENCES_PATH, "w", encoding="utf-8") as f:
+            json.dump(sequences, f, indent=2)
     except Exception:
-        return DEFAULT_SEQUENCES
+        pass
 
+    # 2. Save to SQLite database
+    active_db = db_path or str(BASE_DIR / os.getenv("OUTREACH_DB", "outreach.db"))
+    try:
+        from db import save_db_sequences
+        save_db_sequences(active_db, sequences)
+    except Exception:
+        pass
 
-def save_sequences(sequences: dict):
-    """Save updated sequence templates to sequences.json."""
-    with open(SEQUENCES_PATH, "w", encoding="utf-8") as f:
-        json.dump(sequences, f, indent=2)
