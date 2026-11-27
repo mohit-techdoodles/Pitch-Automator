@@ -1,6 +1,7 @@
 import os
 import json
 from pathlib import Path
+from typing import Optional, Dict, Any
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -90,7 +91,7 @@ def save_config(new_values: dict):
     load_dotenv(dotenv_path=ENV_PATH, override=True)
 
 
-def get_sequences(db_path: Optional[str] = None):
+def get_sequences(db_path: Optional[str] = None, *args, **kwargs) -> Dict[str, Any]:
     """Load sequences with priority: Database -> sequences.json -> DEFAULT_SEQUENCES."""
     # 1. Try loading from SQLite database first
     active_db = db_path or str(BASE_DIR / os.getenv("OUTREACH_DB", "outreach.db"))
@@ -108,7 +109,7 @@ def get_sequences(db_path: Optional[str] = None):
         try:
             with open(SEQUENCES_PATH, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                if data:
+                if data and isinstance(data, dict):
                     return data
         except Exception:
             pass
@@ -118,7 +119,7 @@ def get_sequences(db_path: Optional[str] = None):
     return DEFAULT_SEQUENCES
 
 
-def save_sequences(sequences: dict, db_path: Optional[str] = None):
+def save_sequences(sequences: Dict[str, Any], db_path: Optional[str] = None, *args, **kwargs):
     """Save updated sequence templates to both sequences.json and SQLite database."""
     # 1. Save to JSON
     try:

@@ -87,7 +87,10 @@ st.markdown(
 cfg = get_config()
 db_path = cfg["DB_PATH"]
 init_db(db_path)
-sequences = get_sequences(db_path=db_path)
+try:
+    sequences = get_sequences(db_path=db_path)
+except Exception:
+    sequences = get_sequences()
 
 # Sidebar: Identity & System Summary
 with st.sidebar:
@@ -341,7 +344,10 @@ with tab_sequences:
                 "subject": str(st.session_state.get(f"sub_{s_k}", "")),
                 "body": str(st.session_state.get(f"body_{s_k}", "")),
             }
-        save_sequences(to_save, db_path=db_path)
+        try:
+            save_sequences(to_save, db_path=db_path)
+        except Exception:
+            save_sequences(to_save)
         return to_save
 
     # Action bar: Prominent Save & Backup/Restore
@@ -368,7 +374,10 @@ with tab_sequences:
                 try:
                     loaded_seq = json.load(uploaded_seq)
                     if isinstance(loaded_seq, dict):
-                        save_sequences(loaded_seq, db_path=db_path)
+                        try:
+                            save_sequences(loaded_seq, db_path=db_path)
+                        except Exception:
+                            save_sequences(loaded_seq)
                         for k, v in loaded_seq.items():
                             st.session_state[f"sub_{k}"] = v.get("subject", "")
                             st.session_state[f"body_{k}"] = v.get("body", "")
